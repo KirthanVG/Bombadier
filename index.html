@@ -1,0 +1,180 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  script-src 'self' https://cdnjs.cloudflare.com;
+  style-src 'self' https://cdnjs.cloudflare.com https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  img-src 'self' data: https://server.arcgisonline.com https://flagcdn.com https://cdnjs.cloudflare.com;
+  connect-src https://worldpop.arcgis.com;
+  base-uri 'none';
+  form-action 'none';
+  upgrade-insecure-requests">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Bombadier!</title>
+<meta name="description" content="Drop any of 200 real weapons anywhere on Earth and see the blast rings and estimated casualties, based on real population data.">
+<meta name="theme-color" content="#0d0f13">
+<meta property="og:title" content="Bombadier!">
+<meta property="og:description" content="Drop any of 200 real weapons anywhere on Earth and see the blast rings and estimated casualties.">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+      integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw=="
+      crossorigin="anonymous" referrerpolicy="no-referrer">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
+        integrity="sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+<body>
+<noscript><div class="load-error">Bombadier! needs JavaScript to run. Please turn it on and reload the page.</div></noscript>
+<div id="loadError" class="load-error" hidden>The map couldn't load. Check your internet connection and refresh the page.</div>
+<div id="flash"></div>
+<div id="app">
+  <aside id="sidebar" class="glass">
+    <header>
+      <div class="h1row">
+        <h1><span class="logo" aria-hidden="true"></span>Bombadier!</h1>
+        <button id="aboutBtn" class="about-btn" type="button">About</button>
+      </div>
+      <p>Pick a weapon, then click anywhere on the map to see its effects.</p>
+    </header>
+    <div class="scroll">
+      <section>
+        <h2>Jump to a city</h2>
+        <input id="citySearch" type="text" placeholder="Search cities" autocomplete="off"
+               role="combobox" aria-expanded="false" aria-autocomplete="list">
+      </section>
+
+      <section>
+        <div class="h2row"><h2>Weapons</h2><span class="count" id="bombCount"></span></div>
+        <div class="filters">
+          <input id="bombSearch" type="text" placeholder="Search weapons" autocomplete="off">
+          <button id="countryBtn" class="select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Filter by country"></button>
+          <button id="catBtn" class="select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Filter by type"></button>
+          <div class="seg" id="typeSeg">
+            <button type="button" data-v="all" class="on">All</button>
+            <button type="button" data-v="nuclear">Nuclear</button>
+            <button type="button" data-v="conventional">Conventional</button>
+          </div>
+        </div>
+        <div class="bomb-list" id="bombList"></div>
+        <div class="custom">
+          <input id="customYield" type="number" min="0.00000001" max="1000000" step="any"
+                 placeholder="Custom yield (kilotons)" aria-describedby="customErr">
+          <button class="btn" id="customBtn" type="button">Use</button>
+        </div>
+        <p class="field-error" id="customErr" role="alert" hidden></p>
+      </section>
+
+      <section>
+        <h2>Selected</h2>
+        <div class="details" id="details"></div>
+      </section>
+
+      <section>
+        <h2>Burst height</h2>
+        <div class="row">
+          <div class="seg" id="burstSeg">
+            <button type="button" data-v="air" class="on">Airburst</button>
+            <button type="button" data-v="surface">Surface</button>
+          </div>
+          <button class="btn" id="clearBtn" type="button">Clear all</button>
+        </div>
+        <p class="hint">Airbursts maximise the blast area. Surface bursts have smaller blast rings but throw up radioactive fallout, which isn't modelled here.</p>
+      </section>
+
+      <section>
+        <h2>Effects of last detonation</h2>
+        <div class="legend" id="legend"></div>
+      </section>
+
+      <section class="sources">
+        <h2>Where the numbers come from</h2>
+        <ul>
+          <li><b>Blast effects</b> use the scaling formulas in <i>The Effects of Nuclear Weapons</i>
+            (Glasstone &amp; Dolan, 1977), published by the US government.</li>
+          <li><b>Population</b> comes from <a href="https://www.worldpop.org" target="_blank" rel="noopener noreferrer">WorldPop</a>'s
+            2020 estimates on a 100 m grid, open data from the University of Southampton.</li>
+          <li><b>Weapon yields</b> are from public records. Some are official claims or estimates and are marked with ~.</li>
+          <li><b>Maps</b> are Esri imagery and street tiles, shown with the open-source Leaflet library.</li>
+        </ul>
+        <p>Casualty rates per damage zone are simplified, so all figures are illustrative estimates, not predictions.</p>
+      </section>
+    </div>
+  </aside>
+
+  <main id="mapWrap">
+    <div id="map"></div>
+
+    <div id="stats" class="glass" aria-live="polite">
+      <div class="st-head">
+        <span>Casualty estimate <span id="stStatus" class="st-status"></span></span>
+        <button id="statsToggle" class="icon-btn" type="button" aria-label="Hide details" aria-expanded="true"></button>
+      </div>
+      <div class="st-main">
+        <div><div class="st-v dead" id="sDead">0</div><div class="st-l">Fatalities</div></div>
+        <div><div class="st-v inj" id="sInj">0</div><div class="st-l">Injuries</div></div>
+      </div>
+      <dl class="st-rows">
+        <div><dt>Severe damage (5+ psi)</dt><dd id="sArea">0.00 km²</dd></div>
+        <div><dt>Property damage</dt><dd id="sCost">$0</dd></div>
+        <div><dt>People in range</dt><dd id="sPop">0</dd></div>
+        <div><dt>Detonations</dt><dd id="sCount">0</dd></div>
+      </dl>
+      <p class="st-src" id="stSrc">Population: WorldPop 2020, 100 m grid</p>
+    </div>
+
+    <div id="toast" class="glass"></div>
+  </main>
+</div>
+
+<div id="welcome" class="modal-wrap" role="dialog" aria-modal="true" aria-labelledby="wTitle" hidden>
+  <div class="modal glass">
+    <div class="m-head">
+      <span class="logo" aria-hidden="true"></span>
+      <h2 id="wTitle">Welcome to Bombadier!</h2>
+    </div>
+    <p class="m-lead">
+      An interactive map that shows what a bomb would do if it went off anywhere on Earth,
+      from a hand grenade to the Tsar Bomba, the largest explosion ever set off.
+    </p>
+
+    <h3>How it works</h3>
+    <ol class="m-steps">
+      <li>Pick one of <span id="wCount">200+</span> weapons from the panel on the left.</li>
+      <li>Click anywhere on the map to drop it.</li>
+      <li>Watch the damage rings spread and read the casualty estimate in the top right.</li>
+    </ol>
+
+    <br>
+    <h3>Please keep in mind</h3>
+    <p class="m-note">
+      Every figure here is a rough estimate, not a prediction. The model is deliberately simple: it
+      leaves out terrain, weather, buildings, time of day, warning time, fallout and emergency response.
+      Population shows where people live, not where they are at any given moment. Bombadier! is
+      for education and curiosity only. Data sources are listed at the bottom of the weapons panel.
+    </p>
+
+    <div class="m-foot">
+      <p class="m-signoff">Have fun bombing!</p>
+      <button id="wStart" class="btn primary" type="button">Start exploring</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/weapons.js"></script>
+<script src="js/cities.js"></script>
+<script src="js/explosion.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
