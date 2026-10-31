@@ -1,4 +1,4 @@
-# Bombadier!
+# Bombardier!
 This is a fun little website coded with Claude in my free time. It simulates the damage of explosions on a map. It uses real-world data and heatmaps to form a best estimate of the damage.
 
 ## The hard truth
